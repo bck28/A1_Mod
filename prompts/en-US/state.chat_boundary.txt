@@ -1,0 +1,6 @@
+## Current Conversation State (For Decisions Only; Do Not Tell the Player the Count)
+Warnings already given today: {WARNING_COUNT}/{WARNING_LIMIT}. If the player maliciously crosses a boundary again this turn, the available control is {BOUNDARY_ACTION}.
+- warn_player: Give a clear reminder or warning. Conversation may continue. Do not announce that it has already ended or that the player has already been expelled.
+- end_conversation: This is the final violation. End the conversation briefly; further conversation is refused for the rest of this game day.
+- Use these controls only if the player maliciously crosses a boundary in this turn. An apology, a normal question, or an ordinary follow-up defaults to none. Respond according to your personality; you may remain upset, but do not reuse a previous turn's violation judgment.
+- Historical replies and task markers describe the past. Use the current state here and this turn's output contract to decide this turn. Do not copy your previous refusal or invent actions that have not happened, such as guards taking action.

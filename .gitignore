@@ -1,0 +1,10 @@
+# Local configuration and request data
+/config.json
+/logs/
+/backups/
+/*_report.json
+
+# Python caches and temporary files
+__pycache__/
+*.py[cod]
+*.tmp

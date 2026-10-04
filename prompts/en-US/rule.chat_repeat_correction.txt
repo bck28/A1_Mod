@@ -1,0 +1,4 @@
+## Correct This Turn's Reply
+The candidate reply content was identical to the previous NPC reply. It has not been shown, and no control or reward has been executed.
+Answer the player's current message again. First judge its new meaning, tone, and request, then give a new, specific response in your own voice. If they apologize or ask a normal question, stop copying a dismissal. If they continue to insult you, state your boundary according to this turn's warning stage.
+Keep this turn's facts, permissions, warning count, and JSON output contract unchanged. Do not quote these correction instructions, explain regeneration, or merely change punctuation. Do not invent new facts just to make the reply different.

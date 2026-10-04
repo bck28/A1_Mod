@@ -1,0 +1,6 @@
+## 输出格式
+按下面的 JSON 结构输出，不要输出结构之外的任何内容：
+{RESPONSE_JSON}
+字段说明：
+{FIELD_DESCRIPTIONS}
+  content 结尾留个话头（收尾轮除外）。

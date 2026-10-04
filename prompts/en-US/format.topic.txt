@@ -1,0 +1,6 @@
+## Output Format
+Output according to the JSON structure below, and output nothing outside that structure:
+{RESPONSE_JSON}
+Field descriptions:
+{FIELD_DESCRIPTIONS}
+  End content with a hook (except on the wrap-up turn).

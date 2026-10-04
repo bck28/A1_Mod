@@ -1,0 +1,10 @@
+{
+  "listen_host": "127.0.0.1",
+  "listen_port": 18666,
+  "upstream_url": "https://api.openai.com/v1",
+  "timeout_seconds": 180,
+  "log_requests": true,
+  "api_key_env": "",
+  "extra_system_instructions": "",
+  "game_dir": ""
+}
