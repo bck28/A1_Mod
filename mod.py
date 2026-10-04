@@ -206,7 +206,7 @@ def printable_content(content):
 
 
 def print_dialogue(title, messages, show_system=False):
-    """Print conversation messages for terminal debugging; long prompts stay folded."""
+    """Print conversation messages for terminal debugging; show_system keeps prompts complete."""
     if not isinstance(messages, list) or not messages:
         return
     print(f"[A1_Mod] {title}", flush=True)
@@ -221,6 +221,35 @@ def print_dialogue(title, messages, show_system=False):
             print(f"  [{index}] {role}: <{len(text)} 字符> {head}", flush=True)
         else:
             print(f"  [{index}] {role}: {text}", flush=True)
+
+
+def system_prompts(messages):
+    """Return (index, role, text) for system and developer entries."""
+    found = []
+    if not isinstance(messages, list):
+        return found
+    for index, message in enumerate(messages, 1):
+        if not isinstance(message, dict):
+            continue
+        role = str(message.get("role", ""))
+        if role in ("system", "developer"):
+            found.append((index, role, printable_content(message.get("content"))))
+    return found
+
+
+def print_replaced_system(before, after):
+    """Print the system prompts actually sent upstream when they differ from the original."""
+    originals = {index: text for index, _, text in system_prompts(before.get("messages"))}
+    replaced = [(f"[{index}] {role}", text)
+                for index, role, text in system_prompts(after.get("messages"))
+                if originals.get(index) != text]
+    if after.get("system_prompt") != before.get("system_prompt"):
+        replaced.append(("system_prompt", printable_content(after.get("system_prompt"))))
+    if not replaced:
+        return
+    print("[A1_Mod] 替换后的系统提示词：", flush=True)
+    for label, text in replaced:
+        print(f"  {label}: {text}", flush=True)
 
 
 def response_text(data):
@@ -377,7 +406,8 @@ class Handler(BaseHTTPRequestHandler):
             show_dialogue = bool(config.get("print_dialogue", True))
             if show_dialogue:
                 print_dialogue("接收到的对话消息：", body.get("messages"),
-                               bool(config.get("print_system_messages", False)))
+                               bool(config.get("print_system_messages", True)))
+                print_replaced_system(body, after)
             if config.get("log_requests", True):
                 log_request(root, body, after, stats)
             print(f"[A1_Mod] system_fields={stats['system_text_fields']} matched={sum(stats['matched_templates'].values())} unmatched={len(stats['unmatched_templates'])}", flush=True)

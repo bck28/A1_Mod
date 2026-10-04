@@ -5,7 +5,7 @@
   "timeout_seconds": 180,
   "log_requests": true,
   "print_dialogue": true,
-  "print_system_messages": false,
+  "print_system_messages": true,
   "api_key_env": "",
   "extra_system_instructions": "",
   "game_dir": ""
