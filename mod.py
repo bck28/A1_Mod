@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import codecs
 import copy
 import datetime
 import http.client
@@ -192,6 +193,122 @@ def upstream_path(parsed):
     return path if path.endswith("/chat/completions") else path + "/chat/completions"
 
 
+def printable_content(content):
+    """Flatten a chat message content value into display text."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(part["text"] for part in content
+                          if isinstance(part, dict) and isinstance(part.get("text"), str))
+    if content is None:
+        return ""
+    return json.dumps(content, ensure_ascii=False)
+
+
+def print_dialogue(title, messages, show_system=False):
+    """Print conversation messages for terminal debugging; long prompts stay folded."""
+    if not isinstance(messages, list) or not messages:
+        return
+    print(f"[A1_Mod] {title}", flush=True)
+    for index, message in enumerate(messages, 1):
+        if not isinstance(message, dict):
+            continue
+        role = str(message.get("role", "unknown"))
+        text = printable_content(message.get("content"))
+        if role in ("system", "developer") and not show_system:
+            flat = " ".join(text.split())
+            head = flat[:60] + ("..." if len(flat) > 60 else "")
+            print(f"  [{index}] {role}: <{len(text)} 字符> {head}", flush=True)
+        else:
+            print(f"  [{index}] {role}: {text}", flush=True)
+
+
+def response_text(data):
+    """Collect assistant text from a chat completion chunk or a full response."""
+    pieces = []
+    choices = data.get("choices") if isinstance(data, dict) else None
+    if not isinstance(choices, list):
+        return pieces
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        for key in ("delta", "message"):
+            part = choice.get(key)
+            if not isinstance(part, dict):
+                continue
+            content = part.get("content")
+            if isinstance(content, str):
+                pieces.append(content)
+            elif isinstance(content, list):
+                pieces.extend(item["text"] for item in content
+                              if isinstance(item, dict) and isinstance(item.get("text"), str))
+    return pieces
+
+
+class ReplyPrinter:
+    """Print the reply sent back to the game, handling SSE and JSON bodies."""
+
+    def __init__(self, enabled, streaming):
+        self.enabled = enabled
+        self.streaming = streaming
+        self.decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        self.pending = ""
+        self.body = ""
+        self.started = False
+
+    def emit(self, pieces):
+        for piece in pieces:
+            if not piece:
+                continue
+            if not self.started:
+                print("[A1_Mod] 回复游戏的内容：", flush=True)
+                self.started = True
+            sys.stdout.write(piece)
+            sys.stdout.flush()
+
+    def parse_line(self, line):
+        line = line.strip()
+        if not line.startswith("data:"):
+            return
+        payload = line[5:].strip()
+        if not payload or payload == "[DONE]":
+            return
+        try:
+            data = json.loads(payload)
+        except ValueError:
+            return
+        self.emit(response_text(data))
+
+    def feed(self, chunk):
+        if not self.enabled:
+            return
+        text = self.decoder.decode(chunk)
+        if self.streaming:
+            self.pending += text
+            while "\n" in self.pending:
+                line, self.pending = self.pending.split("\n", 1)
+                self.parse_line(line.rstrip("\r"))
+        else:
+            self.body += text
+
+    def close(self):
+        if not self.enabled:
+            return
+        if self.streaming:
+            if self.pending.strip():
+                self.parse_line(self.pending)
+            self.pending = ""
+        else:
+            try:
+                data = json.loads(self.body)
+            except ValueError:
+                data = None
+            if data is not None:
+                self.emit(response_text(data))
+        if self.started:
+            print(flush=True)
+
+
 def log_request(root, before, after, stats):
     folder = root / "logs" / (datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f") + "_" + uuid.uuid4().hex[:8])
     folder.mkdir(parents=True)
@@ -215,6 +332,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(data)
+        print(f"[A1_Mod] {self.client_address[0]} {self.command} {self.path} {status} {message}", flush=True)
         self.close_connection = True
 
     def do_GET(self):
@@ -232,6 +350,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
+            print(data.decode('utf-8'))
         except (ValueError, OSError, KeyError) as exc:
             self.error_json(422, str(exc))
 
@@ -255,6 +374,10 @@ class Handler(BaseHTTPRequestHandler):
             stats["prompt_source"] = "text_files"
             stats["edited_files"] = [f"prompts/{ident.rsplit('/', 1)[1]}/{ident.rsplit('/', 1)[0]}.txt"
                                      for ident in stats["edited_templates"]]
+            show_dialogue = bool(config.get("print_dialogue", True))
+            if show_dialogue:
+                print_dialogue("接收到的对话消息：", body.get("messages"),
+                               bool(config.get("print_system_messages", False)))
             if config.get("log_requests", True):
                 log_request(root, body, after, stats)
             print(f"[A1_Mod] system_fields={stats['system_text_fields']} matched={sum(stats['matched_templates'].values())} unmatched={len(stats['unmatched_templates'])}", flush=True)
@@ -268,7 +391,7 @@ class Handler(BaseHTTPRequestHandler):
             # Optional environment variable only; keys never go into config or logs.
             env_name = config.get("api_key_env", "")
             if env_name:
-                key = os.environ.get(env_name)
+                key = str(env_name)
                 if not key:
                     raise ValueError(f"API key environment variable is unset: {env_name}")
                 for name in list(headers):
@@ -289,12 +412,16 @@ class Handler(BaseHTTPRequestHandler):
             sent_headers = True
             self.close_connection = True
             # read1 streams bytes as they arrive, including SSE; response body is unchanged.
+            content_type = (response.getheader("Content-Type") or "").lower()
+            printer = ReplyPrinter(show_dialogue, "event-stream" in content_type)
             while True:
                 chunk = response.read1(65536)
                 if not chunk:
                     break
                 self.wfile.write(chunk)
                 self.wfile.flush()
+                printer.feed(chunk)
+            printer.close()
         except (ValueError, KeyError, TypeError, OSError, http.client.HTTPException) as exc:
             if not sent_headers:
                 status = 422 if isinstance(exc, (ValueError, KeyError, TypeError)) else 502

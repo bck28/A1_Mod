@@ -4,6 +4,8 @@
   "upstream_url": "https://api.openai.com/v1",
   "timeout_seconds": 180,
   "log_requests": true,
+  "print_dialogue": true,
+  "print_system_messages": false,
   "api_key_env": "",
   "extra_system_instructions": "",
   "game_dir": ""
